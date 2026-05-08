@@ -1,0 +1,36 @@
+Package: BayesDDB
+Type: Package
+Title: Bayesian Dynamic Borrowing with Double Adjustment
+Version: 0.1.0
+Authors@R: c(
+    person("A.", "Farjat", email = "alfredo.farjat@bayer.com",
+           role = c("aut", "cre")),
+    person("Y.", "Ji", role = "aut"),
+    person("A.", "Kaiser", role = "aut"),
+    person("C.", "Lu", role = "aut"),
+    person("A.", "Pap", role = "aut"),
+    person("J.", "Potts", role = "aut"),
+    person("M.", "Wang", role = "aut")
+  )
+Maintainer: A. Farjat <alfredo.farjat@bayer.com>
+Description: Implements a comprehensive Bayesian dynamic borrowing approach 
+    which calibrates both baseline and outcome differences to quantitatively 
+    determine the amount of information to borrow from external data. The 
+    package uses the propensity score integrated power prior approach to 
+    address baseline differences between external and clinical trial subjects 
+    and utilizes the elastic prior method to adjust for outcome differences. 
+    For adjustment of outcome differences, a class of arctangent elastic 
+    functions for the predictive probability of observing the current data 
+    given the external data is constructed, which can be easily adapted to 
+    clinical input. Methods are available for both continuous and binary 
+    outcome scenarios. For methodological details, see Wang et al. (2019) 
+    <doi:10.1080/10543406.2019.1657133>.
+License: GPL-2 | file LICENSE
+Encoding: UTF-8
+Depends: R (>= 3.5.0)
+Imports: dplyr, overlapping, ggplot2, ggpubr
+Suggests: rjags, testthat (>= 3.0.0), knitr, rmarkdown
+URL: https://github.com/bayer-int/BayesDDB
+BugReports: https://github.com/bayer-int/BayesDDB/issues
+VignetteBuilder: knitr
+RoxygenNote: 7.3.2

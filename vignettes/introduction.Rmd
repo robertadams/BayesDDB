@@ -1,0 +1,365 @@
+---
+title: "Introduction to BayesDDB"
+output: rmarkdown::html_vignette
+vignette: |
+  %\VignetteIndexEntry{Introduction to BayesDDB}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 5
+)
+```
+
+## Overview
+
+The `BayesDDB` package implements a comprehensive Bayesian dynamic borrowing approach for augmenting clinical trial data with external data. The methodology calibrates both baseline and outcome differences to quantitatively determine the amount of information to borrow from external sources.
+
+## Background
+
+### The Problem
+
+Clinical trials often face challenges with recruitment, particularly for control arms. External data sources (e.g., historical trials, real-world data) offer potential for augmentation, but naive pooling can introduce bias if:
+
+1. **Baseline characteristics differ** between external and trial populations
+2. **Outcomes differ** due to unmeasured confounders, time trends, or other factors
+
+### The Solution
+
+This package implements a **double-adjustment** approach:
+
+1. **Baseline Adjustment**: Uses propensity score stratification to address measured confounding
+2. **Outcome Adjustment**: Uses an elastic prior approach based on posterior predictive probability
+
+The package provides four main functions:
+
+- **Single-arm, binary**: `bdb_single_arm_bin()` — one arm augmented by external data (no treatment variable)
+- **Single-arm, continuous**: `bdb_single_arm_cont()` — same design, continuous outcome (requires JAGS)
+- **Two-arm, binary**: `bdb_two_arms_bin()` — randomized trial; control arm augmented by external data
+- **Two-arm, continuous**: `bdb_two_arms_cont()` — same design, continuous outcome (requires JAGS)
+
+## Installation
+
+```{r eval=FALSE}
+# From CRAN (when available)
+install.packages("BayesDDB")
+
+# Development version
+devtools::install_github("bayer-int/BayesDDB")
+```
+
+```{r setup}
+library(BayesDDB)
+```
+
+## Methodology
+
+### Step 1: Propensity Score Modeling
+
+The exposure mechanism (current vs. external) is modeled using logistic regression:
+
+$$\text{logit}(P(Z=1|X)) = \beta_0 + \beta^T X$$
+
+where $Z$ indicates data source (1 = current trial, 0 = external) and $X$ are baseline covariates.
+
+### Step 2: Trimming and Stratification
+
+External subjects outside the propensity score range of current subjects are trimmed. Remaining subjects are stratified into $s$ strata based on propensity score quantiles.
+
+### Step 3: Overlapping Coefficient
+
+Within each stratum, the overlapping coefficient measures the similarity of propensity score distributions between current and external subjects.
+
+### Step 4: Posterior Predictive Probability (PPP)
+
+For each stratum, we compute the probability that data generated from the external posterior would be more extreme than the observed current data:
+
+$$PPP_s = P(\tilde{Y}_s > \bar{Y}_s | Y_{external,s})$$
+
+- $PPP \approx 0.5$: External and current outcomes are similar
+- $PPP \approx 0$ or $1$: Outcomes differ substantially
+
+### Step 5: Elastic Function
+
+The elastic function transforms PPP to a discounting factor:
+
+$$g(PPP) = \frac{\arctan(a \cdot \sin(\pi \cdot PPP))}{\arctan(a)}$$
+
+```{r elastic-plot, fig.cap="Elastic function for different values of tuning parameter a"}
+ppp <- seq(0, 1, by = 0.01)
+
+plot(ppp, elastic_function(ppp, a = 1), type = "l",
+     xlab = "Posterior Predictive Probability",
+     ylab = "g(PPP)",
+     main = "Arctangent Elastic Function",
+     lwd = 2)
+lines(ppp, elastic_function(ppp, a = 5), col = "red", lwd = 2)
+lines(ppp, elastic_function(ppp, a = 10), col = "blue", lwd = 2)
+legend("bottomright",
+       legend = c("a = 1", "a = 5", "a = 10"),
+       col = c("black", "red", "blue"),
+       lwd = 2)
+```
+
+### Step 6: Power Prior Discounting
+
+The final discounting factor combines baseline (overlapping coefficient) and outcome (elastic function) adjustments:
+
+$$\gamma_s = \min\left(1, \frac{A \cdot r_s}{n_{0,s}}\right) \cdot g(PPP_s)$$
+
+where:
+
+- $A$ is the target number of subjects to borrow
+- $r_s$ is the normalized overlapping coefficient
+- $n_{0,s}$ is the number of external subjects in stratum $s$
+
+## Example: Single-Arm Binary Outcome
+
+### Simulate Data
+
+```{r simulate-single-arm-binary}
+set.seed(123)
+
+# Sample sizes
+N0 <- 200  # external subjects
+N1 <- 80   # current trial (single arm)
+
+# Baseline covariates
+X0 <- matrix(rnorm(N0 * 2, mean = 0.2, sd = 1), ncol = 2)
+X1 <- matrix(rnorm(N1 * 2, mean = 0, sd = 1), ncol = 2)
+X <- rbind(X0, X1)
+colnames(X) <- c("X1", "X2")
+
+# Data source indicator
+Z <- c(rep(0, N0), rep(1, N1))
+
+# Binary outcome
+Y <- c(rbinom(N0, 1, 0.4), rbinom(N1, 1, 0.35))
+
+# Summary
+cat("External subjects:", N0, "\n")
+cat("Current subjects:", N1, "\n")
+cat("External event rate:", mean(Y[Z == 0]), "\n")
+cat("Current event rate:", mean(Y[Z == 1]), "\n")
+```
+
+### Run Analysis
+
+```{r single-arm-binary-analysis}
+# Run Bayesian Dynamic Borrowing analysis (single-arm, binary)
+result_sab <- bdb_single_arm_bin(
+  Y = Y,
+  Z = Z,
+  X = X,
+  A = 30,              # Target 30 subjects to borrow
+  s = 3,               # 3 propensity score strata
+  a = 1,               # Elastic function parameter
+  alpha = 0.5,         # Beta prior shape1 (Jeffreys)
+  beta = 0.5,          # Beta prior shape2 (Jeffreys)
+  za = 0.05,           # 95% credible intervals
+  K = 1000,            # Posterior samples
+  double_adj = TRUE,   # Both baseline and outcome adjustment
+  show_plots = FALSE
+)
+```
+
+### Interpret Results
+
+```{r single-arm-binary-results}
+# Overall response rate (estimate, lower CrI, upper CrI)
+result_sab$theta_o
+
+# Credible interval width
+result_sab$Width
+
+# Effective number of subjects borrowed
+result_sab$A_eff
+
+# Single-arm trial (SAT) and external control arm (ECA) event rates
+result_sab$r_sat
+result_sab$r_eca
+```
+
+## Example: Two-Arm Binary Outcome
+
+### Simulate Data
+
+```{r simulate-two-arm-binary}
+# Treatment (external all control, current 1:1 randomized)
+TRT <- c(rep(0, N0), rbinom(N1, 1, 0.5))
+
+# Binary outcome with treatment effect
+p_control <- plogis(-1.5 + 0.3 * X1[, 1] + 0.2 * X1[, 2])
+p_treatment <- plogis(-1.5 + 0.3 * X1[, 1] + 0.2 * X1[, 2] + 0.5)
+Y2 <- c(rbinom(N0, 1, 0.4), rbinom(N1, 1, ifelse(TRT[(N0 + 1):(N0 + N1)] == 1, p_treatment, p_control)))
+
+cat("Current control event rate:", mean(Y2[(N0 + 1):(N0 + N1)][TRT[(N0 + 1):(N0 + N1)] == 0]), "\n")
+cat("Current treatment event rate:", mean(Y2[(N0 + 1):(N0 + N1)][TRT[(N0 + 1):(N0 + N1)] == 1]), "\n")
+```
+
+### Run Analysis
+
+```{r two-arm-binary-analysis}
+# Run BDB analysis (two-arm, binary)
+result_tab <- bdb_two_arms_bin(
+  Y = Y2,
+  Z = Z,
+  TRT = TRT,
+  X = X,
+  A = 30,
+  s = 3,
+  a = 1,
+  alpha = 0.5,
+  beta = 0.5,
+  za = 0.05,
+  K = 1000,
+  double_adj = TRUE,
+  show_plots = FALSE
+)
+```
+
+### Interpret Results
+
+```{r two-arm-binary-results}
+# Overall treatment effect (estimate, lower CrI, upper CrI)
+result_tab$theta_o
+
+# Trial-only treatment effect
+result_tab$theta_n
+
+# Internal control arm (ICA) and external control arm (ECA) event rates
+result_tab$r_ica
+result_tab$r_eca
+```
+
+## Example: Single-Arm Continuous Outcome
+
+Continuous outcome functions require JAGS. The following code is not run when building the vignette.
+
+```{r single-arm-continuous, eval=FALSE}
+# Continuous outcome
+Y_cont <- c(rnorm(N0, 50, 5), rnorm(N1, 52, 5))
+
+# Run analysis (requires JAGS)
+result_sac <- bdb_single_arm_cont(
+  Y = Y_cont,
+  Z = Z,
+  X = X,
+  A = 30,
+  s = 3,
+  a = 1,
+  za = 0.05,
+  n_iter = 5000,
+  double_adj = TRUE,
+  alpha = 0.01,
+  beta = 0.01,
+  tau = 0.00001,
+  show_plots = FALSE
+)
+
+# View results
+result_sac$mean.theta
+result_sac$Width
+result_sac$A_eff
+```
+
+## Example: Two-Arm Continuous Outcome
+
+```{r two-arm-continuous, eval=FALSE}
+# Continuous outcome with treatment effect
+Y2_cont <- c(rnorm(N0, 50, 5), 50 + 3 * TRT[(N0 + 1):(N0 + N1)] + rnorm(N1, 0, 5))
+
+# Run analysis (requires JAGS)
+result_tac <- bdb_two_arms_cont(
+  Y = Y2_cont,
+  Z = Z,
+  TRT = TRT,
+  X = X,
+  A = 30,
+  s = 3,
+  a = 1,
+  za = 0.05,
+  n_iter = 5000,
+  double_adj = TRUE,
+  alpha = 0.01,
+  beta = 0.01,
+  tau = 0.00001,
+  show_plots = FALSE
+)
+
+result_tac$mean.theta
+result_tac$Width
+```
+
+## Diagnostic Plots
+
+With `show_plots = TRUE`, each function returns a list of ggplot objects in the `plots` element with the following names (where applicable): `forest`, `ps_group`, `ps_stratum`, `mcmc`, `overall_rates`, `rates_by_stratum`. These correspond to:
+
+1. **forest**: Forest plot — response or treatment effect by stratum and overall
+2. **ps_group**: Propensity score distribution by group (current vs. external)
+3. **ps_stratum**: Propensity score distribution by group and stratum
+4. **mcmc** (binary: trace/density/ACF of posterior; continuous: MCMC diagnostics)
+5. **overall_rates**: Overall event rates or means (ECA vs SAT, or ICA vs ECA)
+6. **rates_by_stratum**: Event rates or means by stratum
+
+Example: `result$plots$forest`, `result$plots$ps_group`.
+
+## Choosing Parameters
+
+### Number of Strata (s)
+
+- More strata provide finer propensity score adjustment but may lead to small stratum sizes
+- Recommended: 3–5 strata for moderate sample sizes
+- Consider stratum sizes when choosing
+
+### Elastic Function Parameter (a)
+
+- `a = 1`: Moderate discounting, smooth transition
+- `a = 5`: Steeper discounting, more aggressive when outcomes differ
+- `a = 10+`: Very aggressive discounting
+
+### Target Borrowing (A)
+
+- Should be based on clinical and regulatory considerations
+- Typically limited by the effective sample size achievable given overlap
+
+## Comparison: Single vs. Double Adjustment
+
+```{r comparison, eval=FALSE}
+# Single adjustment (baseline only)
+result_single <- bdb_single_arm_bin(
+  Y = Y, Z = Z, X = X,
+  A = 30, s = 3, a = 1,
+  double_adj = FALSE,  # Only baseline adjustment
+  show_plots = FALSE
+)
+
+# Double adjustment
+result_double <- bdb_single_arm_bin(
+  Y = Y, Z = Z, X = X,
+  A = 30, s = 3, a = 1,
+  double_adj = TRUE,   # Both adjustments
+  show_plots = FALSE
+)
+
+# Compare effective borrowing
+cat("Single adjustment A_eff:", result_single$A_eff, "\n")
+cat("Double adjustment A_eff:", result_double$A_eff, "\n")
+```
+
+## References
+
+1. Farjat, A., Ji, Y., Kaiser, A., Lu, C., Pap, A., Potts, J., Wang, M. A Comprehensive Bayesian Double-Adjustment Approach to Dynamic Borrowing of External Data. *Manuscript in progress*.
+
+2. Wang, C., Li, H., Chen, W.C., Lu, N., Tiwari, R., Xu, Y. and Yue, L.Q. (2019). Propensity score-integrated power prior approach for incorporating real-world evidence in single-arm clinical studies. *Journal of Biopharmaceutical Statistics*, 29(5), pp.731-748.
+
+## Session Info
+
+```{r session}
+sessionInfo()
+```
