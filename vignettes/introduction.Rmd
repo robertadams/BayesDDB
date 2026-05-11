@@ -50,7 +50,7 @@ The package provides four main functions:
 install.packages("BayesDDB")
 
 # Development version
-devtools::install_github("bayer-int/BayesDDB")
+pak::pak("bayer-int/BayesDDB")
 ```
 
 ```{r setup}

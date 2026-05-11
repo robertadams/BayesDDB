@@ -8,8 +8,11 @@ Bayesian Dynamic Borrowing with Double Adjustment for augmenting clinical trial 
 # From CRAN (when available)
 install.packages("BayesDDB")
 
-# Development version
-remotes::install_github("bayer-int/BayesDDB")
+# Development version (public)
+pak::pak("robertadams/BayesDDB")
+
+# Development version (internal)
+remotes::install_github("bayer-int/BayesDDB", auth_token =  <PAT>)
 ```
 
 ## Usage
@@ -32,7 +35,7 @@ elastic_function(c(0.1, 0.5, 0.9), a = 1)
 For full methodology and runnable examples, see the vignette:
 
 ```r
-vignette("Introduction to BayesDDB", package = "BayesDDB")
+vignette("introduction", package = "BayesDDB")
 ```
 
 To install from source with the vignette built: `devtools::install(build_vignettes = TRUE)`.

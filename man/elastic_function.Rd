@@ -7,19 +7,19 @@
 elastic_function(ppp, a = 1)
 }
 \arguments{
-\item{ppp}{Numeric vector of posterior predictive probabilities (values 
+\item{ppp}{Numeric vector of posterior predictive probabilities (values
 between 0 and 1).}
 
-\item{a}{Numeric. Tuning parameter for the arctangent elastic function 
-(must be >= 1). Higher values result in less discounting when PPP 
+\item{a}{Numeric. Tuning parameter for the arctangent elastic function
+(must be >= 1). Higher values result in less discounting when PPP
 is near 0.5 and more aggressive discounting when PPP deviates from 0.5.}
 }
 \value{
 Numeric vector of transformed probabilities, same length as \code{ppp}.
 }
 \description{
-Applies the arctangent elastic function to transform the posterior predictive 
-probability (PPP). This function is used for outcome adjustment in the 
+Applies the arctangent elastic function to transform the posterior predictive
+probability (PPP). This function is used for outcome adjustment in the
 double-adjustment approach.
 }
 \details{
@@ -42,11 +42,11 @@ elastic_function(ppp_values, a = 5)
 
 # Plot the elastic function for different tuning parameters
 x <- seq(0, 1, by = 0.01)
-plot(x, elastic_function(x, a = 1), type = "l", 
+plot(x, elastic_function(x, a = 1), type = "l",
      xlab = "PPP", ylab = "g(PPP)", main = "Elastic Function")
 lines(x, elastic_function(x, a = 5), col = "red")
 lines(x, elastic_function(x, a = 10), col = "blue")
-legend("bottomright", legend = c("a=1", "a=5", "a=10"), 
+legend("bottomright", legend = c("a=1", "a=5", "a=10"),
        col = c("black", "red", "blue"), lty = 1)
 
 }
