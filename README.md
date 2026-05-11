@@ -38,7 +38,8 @@ For full methodology and runnable examples, see the vignette:
 vignette("introduction", package = "BayesDDB")
 ```
 
-To install from source with the vignette built: `devtools::install(build_vignettes = TRUE)`.
+To install from source with the vignette built: 
+`devtools::install_github("robertadams/BayesDDB", build_vignettes = TRUE)`.
 
 ## License
 
