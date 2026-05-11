@@ -43,4 +43,4 @@ To install from source with the vignette built:
 
 ## License
 
-GPL-3. See [LICENSE.md](LICENSE) for details.
+GPL-3. See [LICENSE](LICENSE.md) for details.
