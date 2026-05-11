@@ -42,4 +42,4 @@ To install from source with the vignette built: `devtools::install(build_vignett
 
 ## License
 
-GPL-2. See [LICENSE](LICENSE) for details.
+GPL-3. See [LICENSE.md](LICENSE) for details.
